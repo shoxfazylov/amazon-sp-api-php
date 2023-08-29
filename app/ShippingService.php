@@ -1,4 +1,5 @@
 <?php
+
 namespace App;
 
 use ClouSale\AmazonSellingPartnerAPI\Api\FbaOutboundApi;
@@ -8,8 +9,8 @@ use ClouSale\AmazonSellingPartnerAPI\Models\FulfillmentOutbound\CreateFulfillmen
 class ShippingService implements ShippingServiceInterface
 {
 
-    protected $config;
-    protected $order;
+    protected $order_id;
+    protected $apiInstance;
 
     public function __construct()
     {
@@ -18,16 +19,16 @@ class ShippingService implements ShippingServiceInterface
         $config->setApiKey("accessKey", 'AKIA2xxxxxxxxxxxxx'); // Access Key of IAM
         $config->setApiKey("secretKey", '94U4Gi81Tpxxxxxxxxxxxxxxx'); // Secret Key of IAM
         $config->setApiKey("region", 'us-east-1'); //region of MarketPlace country
+        $this->apiInstance = new FbaOutboundApi($config);
     }
 
     public function createOrder(array $data = null)
     {
-        $apiInstance = new FbaOutboundApi($this->config);
         $body = new CreateFulfillmentOrderRequest($data);
 
         try {
-            $result = $apiInstance->createFulfillmentOrder($body);
-            $this->order = $result; // TODO: could not check what comes in response
+            $result = $this->apiInstance->createFulfillmentOrder($body);
+            $this->order_id = $body['seller_fulfillment_order_id']; // TODO: could not check what comes in response
             print_r($result);
         } catch (\Exception $e) {
             echo 'Exception when calling FbaOutboundApi->createFulfillmentOrder: ', $e->getMessage(), PHP_EOL;
@@ -36,13 +37,26 @@ class ShippingService implements ShippingServiceInterface
 
     public function ship()
     {
-        $apiInstance = new FbaOutboundApi($this->config);
         try {
-            $orderDetail = $apiInstance->getFulfillmentOrder($this->order['RequestId']);
-            
+            $orderDetail = $this->apiInstance->getFulfillmentOrder($this->order_id);
+            try {
+                return $this->getTracking($orderDetail);
+            } catch (\Exception $e) {
+                echo 'Exception when calling FbaOutboundApi->getPackageTrackingDetails: ', $e->getMessage(), PHP_EOL;
+            }
         } catch (\Exception $e) {
-            echo 'Exception when calling FbaOutboundApi->createFulfillmentOrder: ', $e->getMessage(), PHP_EOL;
+            echo 'Exception when calling FbaOutboundApi->getFulfillmentOrder: ', $e->getMessage(), PHP_EOL;
         }
         // TODO: Implement getTrackingDetails() method.
+    }
+
+    private function getTracking(array $orderDetail = []): array
+    {
+        $trackings = [];
+
+        foreach ($orderDetail['fulfillment_shipment']['fulfillment_shipment_package'] as $package) {
+            $trackings[] = $this->apiInstance->getPackageTrackingDetails($package['package_number']);
+        }
+        return $trackings;
     }
 }
